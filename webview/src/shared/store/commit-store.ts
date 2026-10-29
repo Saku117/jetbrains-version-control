@@ -1,0 +1,643 @@
+import { create } from "zustand";
+import { bridge } from "../bridge";
+import type { SelectionMode } from "../hooks/useModifierClickSelection";
+
+export interface WorkingTreeFile {
+  path: string;
+  oldPath?: string;
+  status:
+    | "added"
+    | "modified"
+    | "deleted"
+    | "renamed"
+    | "untracked"
+    | "conflicted";
+  staged: boolean;
+}
+
+export interface ShelveEntry {
+  id: string;
+  message: string;
+  date: string;
+  branch: string;
+  files: string[];
+}
+
+export interface IdeaShelfEntry {
+  name: string;
+  description: string;
+  date: string;
+  patchPath: string;
+  files: string[];
+}
+
+type TabType = "commit" | "shelf" | "stash";
+
+interface CommitStore {
+  // File changes
+  changes: WorkingTreeFile[];
+  selectedFiles: Set<string>;
+  /** Files highlighted via click/Cmd+click (for context menu operations) */
+  highlightedFiles: Set<string>;
+  /** Anchor for Shift range selection of `highlightedFiles` */
+  lastHighlightedKey: string | null;
+
+  // Commit state
+  commitMessage: string;
+  amend: boolean;
+
+  // Shelf
+  shelves: ShelveEntry[];
+
+  // IDEA Shelf
+  ideaShelves: IdeaShelfEntry[];
+
+  // UI state
+  activeTab: TabType;
+  loading: boolean;
+  expandedGroups: Set<string>;
+  groupByDirectory: boolean;
+  showUnversioned: boolean;
+  /** Collapsed directory paths in tree view */
+  collapsedDirs: Set<string>;
+
+  // AI commit message
+  aiGenerating: boolean;
+
+  // Actions
+  fetchChanges: () => Promise<void>;
+  fetchShelves: () => Promise<void>;
+  setCommitMessage: (msg: string) => void;
+  setAmend: (amend: boolean) => void;
+  toggleFileSelection: (filePath: string) => void;
+  setFileKeys: (keys: string[], selected: boolean) => void;
+  selectAllFiles: () => void;
+  deselectAllFiles: () => void;
+  highlightFile: (
+    key: string,
+    mode: SelectionMode,
+    orderedKeys: string[],
+  ) => void;
+  stageFile: (filePath: string) => Promise<void>;
+  unstageFile: (filePath: string) => Promise<void>;
+  stageAll: () => Promise<void>;
+  unstageAll: () => Promise<void>;
+  commit: () => Promise<boolean>;
+  commitAndPush: () => Promise<boolean>;
+  rollbackFile: (filePath: string) => Promise<void>;
+  showDiff: (filePath: string, staged?: boolean) => Promise<void>;
+  openSourceFile: (filePath: string) => Promise<void>;
+  jumpToHighlightedSource: () => void;
+  shelveChanges: (message?: string, filePaths?: string[]) => Promise<void>;
+  unshelveChanges: (stashId: string, drop?: boolean) => Promise<void>;
+  deleteShelve: (stashId: string) => Promise<void>;
+  fetchIdeaShelves: () => Promise<void>;
+  ideaShelveChanges: (message?: string, filePaths?: string[]) => Promise<void>;
+  ideaUnshelveChanges: (shelfName: string, drop?: boolean) => Promise<void>;
+  deleteIdeaShelf: (shelfName: string) => Promise<void>;
+  setActiveTab: (tab: TabType) => void;
+  toggleGroup: (group: string) => void;
+  toggleDir: (dirPath: string) => void;
+  expandAllDirs: () => void;
+  collapseAllDirs: (allDirPaths: string[]) => void;
+  toggleGroupByDirectory: () => void;
+  toggleShowUnversioned: () => void;
+  generateCommitMessage: () => Promise<void>;
+  cancelCommitMessage: () => Promise<void>;
+  chooseAiModel: () => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
+export const useCommitStore = create<CommitStore>((set, get) => ({
+  changes: [],
+  selectedFiles: new Set<string>(),
+  highlightedFiles: new Set<string>(),
+  lastHighlightedKey: null,
+  commitMessage: "",
+  amend: false,
+  shelves: [],
+  ideaShelves: [],
+  activeTab: "commit",
+  loading: false,
+  expandedGroups: new Set(["changes", "unversioned", "staged"]),
+  groupByDirectory: true,
+  showUnversioned: true,
+  collapsedDirs: new Set<string>(),
+  aiGenerating: false,
+
+  async fetchChanges() {
+    set({ loading: true });
+    const start = Date.now();
+    try {
+      const result = (await bridge.request(
+        "getWorkingTreeChanges",
+      )) as WorkingTreeFile[];
+      if (Array.isArray(result)) {
+        const newPaths = new Set(result.map((f) => `${f.path}:${f.staged}`));
+        const { selectedFiles, highlightedFiles, changes } = get();
+        const keepExisting = (keys: Set<string>) => {
+          const kept = new Set<string>();
+          for (const key of keys) {
+            if (newPaths.has(key)) kept.add(key);
+          }
+          return kept;
+        };
+        if (changes.length === 0) {
+          // First load — no auto-selection (user manually selects files)
+          set({
+            changes: result,
+            selectedFiles: new Set<string>(),
+            highlightedFiles: new Set<string>(),
+            lastHighlightedKey: null,
+          });
+        } else {
+          // Refresh — preserve user's selection state (only keep existing selections)
+          const anchor = get().lastHighlightedKey;
+          set({
+            changes: result,
+            selectedFiles: keepExisting(selectedFiles),
+            highlightedFiles: keepExisting(highlightedFiles),
+            lastHighlightedKey: anchor && newPaths.has(anchor) ? anchor : null,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("fetchChanges failed:", err);
+    } finally {
+      // Ensure loading bar is visible for at least 300ms
+      const elapsed = Date.now() - start;
+      if (elapsed < 300) {
+        await new Promise((r) => setTimeout(r, 300 - elapsed));
+      }
+      set({ loading: false });
+    }
+  },
+
+  async fetchShelves() {
+    try {
+      const result = (await bridge.request("getShelves")) as ShelveEntry[];
+      if (Array.isArray(result)) {
+        set({ shelves: result });
+      }
+    } catch (err) {
+      console.error("fetchShelves failed:", err);
+    }
+  },
+
+  setCommitMessage(msg: string) {
+    set({ commitMessage: msg });
+  },
+
+  setAmend(amend: boolean) {
+    set({ amend });
+    if (amend) {
+      // Load last commit message, but only into an empty box: overwriting a
+      // message the user already typed would discard it.
+      void (async () => {
+        try {
+          const result = (await bridge.request("getAmendMessage")) as {
+            message: string;
+          };
+          if (result?.message && !get().commitMessage.trim()) {
+            set({ commitMessage: result.message });
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    }
+  },
+
+  toggleFileSelection(key: string) {
+    const { selectedFiles } = get();
+    const next = new Set(selectedFiles);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    set({ selectedFiles: next });
+  },
+
+  setFileKeys(keys: string[], selected: boolean) {
+    const { selectedFiles } = get();
+    const next = new Set(selectedFiles);
+    for (const key of keys) {
+      if (selected) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+    }
+    set({ selectedFiles: next });
+  },
+
+  selectAllFiles() {
+    const { changes } = get();
+    const allPaths = new Set(changes.map((f) => `${f.path}:${f.staged}`));
+    set({ selectedFiles: allPaths });
+  },
+
+  deselectAllFiles() {
+    set({ selectedFiles: new Set() });
+  },
+
+  highlightFile(key: string, mode: SelectionMode, orderedKeys: string[]) {
+    const { highlightedFiles, lastHighlightedKey } = get();
+
+    if (mode === "range" && lastHighlightedKey) {
+      const anchorIdx = orderedKeys.indexOf(lastHighlightedKey);
+      const targetIdx = orderedKeys.indexOf(key);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(anchorIdx, targetIdx);
+        const end = Math.max(anchorIdx, targetIdx);
+        set({
+          highlightedFiles: new Set(orderedKeys.slice(start, end + 1)),
+          lastHighlightedKey: key,
+        });
+        return;
+      }
+    }
+
+    if (mode === "toggle") {
+      // toggle (Cmd+click)
+      const next = new Set(highlightedFiles);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      set({ highlightedFiles: next, lastHighlightedKey: key });
+      return;
+    }
+
+    set({ highlightedFiles: new Set([key]), lastHighlightedKey: key });
+  },
+
+  async stageFile(filePath: string) {
+    try {
+      await bridge.request("stageFile", { filePath });
+      await get().fetchChanges();
+    } catch (err) {
+      console.error("stageFile failed:", err);
+    }
+  },
+
+  async unstageFile(filePath: string) {
+    try {
+      await bridge.request("unstageFile", { filePath });
+      await get().fetchChanges();
+    } catch (err) {
+      console.error("unstageFile failed:", err);
+    }
+  },
+
+  async stageAll() {
+    try {
+      await bridge.request("stageAll");
+      await get().fetchChanges();
+    } catch (err) {
+      console.error("stageAll failed:", err);
+    }
+  },
+
+  async unstageAll() {
+    try {
+      await bridge.request("unstageAll");
+      await get().fetchChanges();
+    } catch (err) {
+      console.error("unstageAll failed:", err);
+    }
+  },
+
+  async commit() {
+    const { commitMessage, amend, changes, selectedFiles } = get();
+    if (!commitMessage.trim()) return false;
+
+    // Get selected file paths (only unstaged ones need to be staged). A rename
+    // is two index changes — old path deleted, new path added — so both sides
+    // must be staged together for the rename to land whole.
+    const filesToStage = changes
+      .filter((f) => !f.staged && selectedFiles.has(`${f.path}:${f.staged}`))
+      .flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+    // Staged files the user UNchecked must stay out of the commit: a plain
+    // `git commit` would sweep the whole index in, so the extension host
+    // unstages them first and re-stages them after. Renames again need both
+    // sides, or the old path's staged deletion would still be committed.
+    const keepStagedPaths = changes
+      .filter((f) => f.staged && !selectedFiles.has(`${f.path}:${f.staged}`))
+      .flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+
+    try {
+      set({ loading: true });
+      await bridge.request("commitChanges", {
+        message: commitMessage,
+        amend,
+        filePaths: filesToStage,
+        keepStagedPaths,
+      });
+      set({ commitMessage: "", amend: false });
+      await get().fetchChanges();
+      return true;
+    } catch (err) {
+      console.error("commit failed:", err);
+      return false;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async commitAndPush() {
+    const { commitMessage, amend, changes, selectedFiles } = get();
+    if (!commitMessage.trim()) return false;
+
+    const filesToStage = changes
+      .filter((f) => !f.staged && selectedFiles.has(`${f.path}:${f.staged}`))
+      .flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+    const keepStagedPaths = changes
+      .filter((f) => f.staged && !selectedFiles.has(`${f.path}:${f.staged}`))
+      .flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]));
+
+    try {
+      set({ loading: true });
+      await bridge.request("commitAndPush", {
+        message: commitMessage,
+        amend,
+        filePaths: filesToStage,
+        keepStagedPaths,
+      });
+      set({ commitMessage: "", amend: false });
+      await get().fetchChanges();
+      return true;
+    } catch (err) {
+      console.error("commitAndPush failed:", err);
+      return false;
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async rollbackFile(filePath: string) {
+    try {
+      await bridge.request("rollbackFile", { filePath });
+      await get().fetchChanges();
+    } catch (err) {
+      console.error("rollbackFile failed:", err);
+    }
+  },
+
+  async showDiff(filePath: string, staged?: boolean) {
+    try {
+      await bridge.request("showDiffForWorkingFile", { filePath, staged });
+    } catch (err) {
+      console.error("showDiff failed:", err);
+    }
+  },
+
+  async openSourceFile(filePath: string) {
+    try {
+      await bridge.request("openFile", { filePath });
+    } catch (err) {
+      console.error("openSourceFile failed:", err);
+    }
+  },
+
+  /** Jump to Source for the focused/highlighted row (F4, Cmd+Down). */
+  jumpToHighlightedSource() {
+    const { changes, highlightedFiles, lastHighlightedKey } = get();
+    const key =
+      (lastHighlightedKey && highlightedFiles.has(lastHighlightedKey)
+        ? lastHighlightedKey
+        : undefined) ??
+      (highlightedFiles.size === 1 ? [...highlightedFiles][0] : undefined);
+    if (!key) return;
+    const file = changes.find((f) => `${f.path}:${f.staged}` === key);
+    if (!file) return;
+    void get().openSourceFile(file.path);
+  },
+
+  async shelveChanges(message?: string, filePaths?: string[]) {
+    try {
+      set({ loading: true });
+      await bridge.request("shelveChanges", { message, filePaths });
+      await get().fetchChanges();
+      await get().fetchShelves();
+    } catch (err) {
+      console.error("shelveChanges failed:", err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async unshelveChanges(stashId: string, drop = true) {
+    try {
+      set({ loading: true });
+      await bridge.request("unshelveChanges", { stashId, drop });
+      await get().fetchChanges();
+      await get().fetchShelves();
+    } catch (err) {
+      console.error("unshelveChanges failed:", err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async deleteShelve(stashId: string) {
+    try {
+      await bridge.request("deleteShelve", { stashId });
+      await get().fetchShelves();
+    } catch (err) {
+      console.error("deleteShelve failed:", err);
+    }
+  },
+
+  async fetchIdeaShelves() {
+    try {
+      const result = (await bridge.request(
+        "getIdeaShelves",
+      )) as IdeaShelfEntry[];
+      if (Array.isArray(result)) {
+        set({ ideaShelves: result });
+      }
+    } catch (err) {
+      console.error("fetchIdeaShelves failed:", err);
+    }
+  },
+
+  async ideaShelveChanges(message?: string, filePaths?: string[]) {
+    try {
+      set({ loading: true });
+      await bridge.request("ideaShelveChanges", { message, filePaths });
+      await get().fetchChanges();
+      await get().fetchIdeaShelves();
+    } catch (err) {
+      console.error("ideaShelveChanges failed:", err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async ideaUnshelveChanges(shelfName: string, drop = true) {
+    try {
+      set({ loading: true });
+      await bridge.request("ideaUnshelveChanges", { shelfName, drop });
+      await get().fetchChanges();
+      await get().fetchIdeaShelves();
+    } catch (err) {
+      console.error("ideaUnshelveChanges failed:", err);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  async deleteIdeaShelf(shelfName: string) {
+    try {
+      await bridge.request("deleteIdeaShelf", { shelfName });
+      await get().fetchIdeaShelves();
+    } catch (err) {
+      console.error("deleteIdeaShelf failed:", err);
+    }
+  },
+
+  setActiveTab(tab: TabType) {
+    set({ activeTab: tab });
+    if (tab === "stash") {
+      get().fetchShelves();
+    } else if (tab === "shelf") {
+      get().fetchIdeaShelves();
+    }
+  },
+
+  toggleGroup(group: string) {
+    const { expandedGroups } = get();
+    const next = new Set(expandedGroups);
+    if (next.has(group)) {
+      next.delete(group);
+    } else {
+      next.add(group);
+    }
+    set({ expandedGroups: next });
+  },
+
+  toggleDir(dirPath: string) {
+    const { collapsedDirs } = get();
+    const next = new Set(collapsedDirs);
+    if (next.has(dirPath)) {
+      next.delete(dirPath);
+    } else {
+      next.add(dirPath);
+    }
+    set({ collapsedDirs: next });
+  },
+
+  expandAllDirs() {
+    set({ collapsedDirs: new Set() });
+  },
+
+  collapseAllDirs(allDirPaths: string[]) {
+    set({ collapsedDirs: new Set(allDirPaths) });
+  },
+
+  toggleGroupByDirectory() {
+    const next = !get().groupByDirectory;
+    // When toggling to directory mode, reset collapsed state so DirectoryTree will collapse all on mount
+    if (next) {
+      set({ groupByDirectory: true, collapsedDirs: new Set() });
+    } else {
+      set({ groupByDirectory: false, collapsedDirs: new Set() });
+    }
+  },
+
+  toggleShowUnversioned() {
+    set({ showUnversioned: !get().showUnversioned });
+  },
+
+  /**
+   * Generate a commit message for the checked files. The extension host
+   * streams `aiCommitMessageDelta` events while the request is in flight;
+   * the accumulated text fills the input box live and the final response
+   * settles it.
+   */
+  async generateCommitMessage() {
+    const { changes, selectedFiles, aiGenerating } = get();
+    if (aiGenerating) return;
+    const files = changes
+      .filter((f) => selectedFiles.has(`${f.path}:${f.staged}`))
+      .map((f) => ({ path: f.path, staged: f.staged, status: f.status }));
+    if (files.length === 0) return;
+
+    set({ aiGenerating: true, commitMessage: "" });
+    try {
+      const result = (await bridge.request("generateCommitMessage", {
+        files,
+      })) as {
+        success?: boolean;
+        message?: string;
+        cancelled?: boolean;
+        error?: string;
+      };
+      if (result?.success && typeof result.message === "string") {
+        set({ commitMessage: result.message });
+      } else if (result?.error) {
+        console.error("generateCommitMessage failed:", result.error);
+      }
+    } catch (err) {
+      console.error("generateCommitMessage failed:", err);
+    } finally {
+      set({ aiGenerating: false });
+    }
+  },
+
+  /** Opens the host-side model picker and remembers the choice. */
+  async chooseAiModel() {
+    try {
+      await bridge.request("chooseAiModel");
+    } catch (err) {
+      console.error("chooseAiModel failed:", err);
+    }
+  },
+
+  async cancelCommitMessage() {
+    try {
+      await bridge.request("cancelCommitMessage");
+    } catch (err) {
+      console.error("cancelCommitMessage failed:", err);
+    }
+  },
+
+  async refresh() {
+    await Promise.all([
+      get().fetchChanges(),
+      get().fetchShelves(),
+      get().fetchIdeaShelves(),
+    ]);
+  },
+}));
+
+// Listen for commit state changes
+bridge.onEvent((event, data) => {
+  if (event === "commitStateChanged") {
+    useCommitStore.getState().fetchChanges();
+    useCommitStore.getState().fetchIdeaShelves();
+    useCommitStore.getState().fetchShelves();
+    return;
+  }
+  if (event === "gitStateChanged") {
+    // Working-tree changes are cheap and always relevant; the shelf lists
+    // only change with real Git-state operations (scope "all"), so saving a
+    // file (scope "status") no longer spawns a `stash show` per entry.
+    useCommitStore.getState().fetchChanges();
+    const { scope } = (data ?? {}) as { scope?: string };
+    if (!scope || scope === "all") {
+      useCommitStore.getState().fetchIdeaShelves();
+      useCommitStore.getState().fetchShelves();
+    }
+  }
+  if (event === "aiCommitMessageDelta") {
+    const { text } = (data ?? {}) as { text?: string };
+    const state = useCommitStore.getState();
+    if (state.aiGenerating && typeof text === "string" && text.length > 0) {
+      useCommitStore.setState({ commitMessage: state.commitMessage + text });
+    }
+  }
+});

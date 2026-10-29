@@ -1,0 +1,663 @@
+{
+  "name": "jetbrains-git-control",
+  "displayName": "JetBrains Git Control",
+  "publisher": "witt-bit",
+  "description": "Bring IntelliJ IDEA / JetBrains Git experience to VS Code & Cursor: Git graph visualization, IDEA-style commit panel with shelf/stash, branch management, cherry-pick, rebase, merge, 3-way merge editor, inline git blame annotations, and context menus. The best JetBrains Git alternative for Visual Studio Code.",
+  "version": "1.1.3",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/witt-bit/jetbrains-version-control"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "intellij",
+    "jetbrains",
+    "idea",
+    "git graph",
+    "commit",
+    "shelf",
+    "stash",
+    "branch",
+    "merge",
+    "cherry-pick",
+    "rebase",
+    "git log",
+    "context menu",
+    "diff",
+    "3-way merge",
+    "webstorm",
+    "pycharm",
+    "goland",
+    "rider",
+    "version control"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "git-brains-panel",
+          "title": "JetBrains Git Control",
+          "icon": "$(git-branch)"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "git-brains-commit",
+          "title": "Commit",
+          "icon": "images/commit-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "git-brains-panel": [
+        {
+          "type": "webview",
+          "id": "git-brains.gitLog",
+          "name": "Git Log"
+        },
+        {
+          "type": "webview",
+          "id": "git-brains.worktrees",
+          "name": "Worktrees"
+        }
+      ],
+      "git-brains-commit": [
+        {
+          "type": "webview",
+          "id": "git-brains.commitPanel",
+          "name": "Commit"
+        },
+        {
+          "type": "tree",
+          "id": "git-brains.commitBadge",
+          "name": "Commit",
+          "visibility": "hidden"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "jgc.marker.prevChange",
+        "title": "Previous Change",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.nextChange",
+        "title": "Next Change",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.rollbackLines",
+        "title": "Rollback Lines",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.showDiffForLines",
+        "title": "Show Diff for Lines",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.copyBlock",
+        "title": "Copy Change Block",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.commitBlock",
+        "title": "Commit this Change",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.manageSelection",
+        "title": "Manage Selection...",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.marker.closePopup",
+        "title": "Close Change Popup",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.status.menu",
+        "title": "Git Actions",
+        "icon": "$(git-branch)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.refreshLog",
+        "title": "Refresh Git Log",
+        "icon": "$(refresh)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.openMergeEditor",
+        "title": "Open Merge Editor",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.openConflicts",
+        "title": "Conflicts",
+        "icon": "$(git-merge)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.openMergeEditorFromSCM",
+        "title": "Open in JGC Merge Editor",
+        "icon": "$(git-merge)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.showFileHistory",
+        "title": "Show File History",
+        "icon": "$(history)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.nextDiff",
+        "title": "Next File Diff",
+        "icon": "$(arrow-down)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.prevDiff",
+        "title": "Previous File Diff",
+        "icon": "$(arrow-up)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commitPanel.refresh",
+        "title": "Refresh Changes",
+        "icon": "$(refresh)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commitPanel.commit",
+        "title": "Commit",
+        "icon": "$(check)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commitPanel.commitAndPush",
+        "title": "Commit and Push",
+        "icon": "$(cloud-upload)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commitPanel.shelve",
+        "title": "Shelve Changes",
+        "icon": "$(archive)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commitPanel.unshelve",
+        "title": "Unshelve Changes",
+        "icon": "$(package)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.commit.jumpToSource",
+        "title": "Jump to Source",
+        "icon": "$(go-to-file)",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.hijack.tongyi.command.generateCommitMessage",
+        "title": "Test Hijack: Qoder",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.hijack.github.copilot.git.generateCommitMessage",
+        "title": "Test Hijack: Copilot",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.hijack.codegeex.commit.message",
+        "title": "Test Hijack: CodeGeeX",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.generate",
+        "title": "Test AI Commit Message Generation",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.vendor.tongyi.command.generateCommitMessage",
+        "title": "Test Vendor: Qoder",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.vendor.github.copilot.git.generateCommitMessage",
+        "title": "Test Vendor: Copilot",
+        "category": "JGC"
+      },
+      {
+        "command": "jgc.dev.aiProbe.vendor.codegeex.commit.message",
+        "title": "Test Vendor: CodeGeeX",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.openPushPanel",
+        "title": "Push...",
+        "icon": "$(cloud-upload)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.editSource",
+        "title": "Edit Source",
+        "icon": "$(go-to-file)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.annotateWithGitBlame",
+        "title": "Toggle Git Blame Annotations",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.worktrees.new",
+        "title": "New Worktree...",
+        "icon": "$(add)",
+        "category": "JGC"
+      },
+      {
+        "command": "git-brains.worktrees.refresh",
+        "title": "Refresh Worktrees",
+        "icon": "$(refresh)",
+        "category": "JGC"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "jgc.editorGit",
+        "label": "Git"
+      }
+    ],
+    "menus": {
+      "view/title": [],
+      "editor/title": [
+        {
+          "command": "git-brains.commit.jumpToSource",
+          "when": "inDiffEditor",
+          "group": "navigation@2"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "git-brains.openConflicts",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "git-brains.openMergeEditorFromSCM",
+          "when": "scmProvider == git && scmResourceGroup == merge",
+          "group": "inline@10"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "jgc.editorGit",
+          "when": "editorTextFocus",
+          "group": "git@1"
+        }
+      ],
+      "jgc.editorGit": [
+        {
+          "command": "git-brains.showFileHistory",
+          "when": "editorTextFocus",
+          "group": "1_history@1"
+        },
+        {
+          "command": "git-brains.editSource",
+          "when": "isInDiffEditor && resourceScheme != file",
+          "group": "1_history@2"
+        },
+        {
+          "command": "jgc.marker.manageSelection",
+          "group": "2_selection@1"
+        }
+      ],
+      "editor/lineNumber/context": [
+        {
+          "command": "git-brains.annotateWithGitBlame",
+          "group": "git@1"
+        },
+        {
+          "command": "jgc.marker.manageSelection",
+          "group": "git@2"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "jgc.marker.commitBlock",
+          "group": "inline@1",
+          "when": "commentThread == jgc.markerPopup"
+        }
+      ],
+      "commandPalette": [],
+      "explorer/context": [
+        {
+          "command": "git-brains.showFileHistory",
+          "when": "!explorerResourceIsFolder",
+          "group": "git@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "jgc.marker.closePopup",
+        "key": "escape",
+        "when": "jgc.markerPopupVisible"
+      },
+      {
+        "command": "git-brains.openPushPanel",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      },
+      {
+        "command": "git-brains.nextDiff",
+        "key": "ctrl+f7",
+        "mac": "cmd+f7",
+        "when": "editorFocus"
+      },
+      {
+        "command": "git-brains.prevDiff",
+        "key": "ctrl+shift+f7",
+        "mac": "cmd+shift+f7",
+        "when": "editorFocus"
+      },
+      {
+        "command": "git-brains.commit.jumpToSource",
+        "key": "f4",
+        "when": "jgc.commitPanelFocused || jgc.gitLogPanelFocused || inDiffEditor"
+      },
+      {
+        "command": "git-brains.commit.jumpToSource",
+        "key": "ctrl+down",
+        "mac": "cmd+down",
+        "when": "jgc.commitPanelFocused || jgc.gitLogPanelFocused || inDiffEditor"
+      },
+      {
+        "command": "-cursorBottom",
+        "key": "ctrl+down",
+        "mac": "cmd+down",
+        "when": "jgc.commitPanelFocused || jgc.gitLogPanelFocused"
+      }
+    ],
+    "colors": [
+      {
+        "id": "jgc.decoration.added",
+        "description": "Color of added files and lines (File Status: Added)",
+        "defaults": {
+          "dark": "#6bae71",
+          "light": "#6bae71",
+          "highContrast": "#6bae71",
+          "highContrastLight": "#6bae71"
+        }
+      },
+      {
+        "id": "jgc.decoration.modified",
+        "description": "Color of modified files and lines (File Status: Modified)",
+        "defaults": {
+          "dark": "#6da9f8",
+          "light": "#6da9f8",
+          "highContrast": "#6da9f8",
+          "highContrastLight": "#6da9f8"
+        }
+      },
+      {
+        "id": "jgc.decoration.deleted",
+        "description": "Color of deleted files and lines (File Status: Deleted)",
+        "defaults": {
+          "dark": "#6f737a",
+          "light": "#6f737a",
+          "highContrast": "#6f737a",
+          "highContrastLight": "#6f737a"
+        }
+      },
+      {
+        "id": "jgc.decoration.untracked",
+        "description": "Color of files not yet tracked by Git (File Status: unversioned)",
+        "defaults": {
+          "dark": "#6bae71",
+          "light": "#6bae71",
+          "highContrast": "#6bae71",
+          "highContrastLight": "#6bae71"
+        }
+      },
+      {
+        "id": "jgc.decoration.ignored",
+        "description": "Color of Git-ignored files (File Status: Ignored)",
+        "defaults": {
+          "dark": "#a17554",
+          "light": "#a17554",
+          "highContrast": "#a17554",
+          "highContrastLight": "#a17554"
+        }
+      },
+      {
+        "id": "jgc.decoration.conflict",
+        "description": "Color of files with unresolved merge conflicts (File Status: Merged with conflicts)",
+        "defaults": {
+          "dark": "#de6b66",
+          "light": "#de6b66",
+          "highContrast": "#de6b66",
+          "highContrastLight": "#de6b66"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "JetBrains Git Control",
+      "properties": {
+        "jgc.shortcut.jumpToSourceLabel": {
+          "type": "string",
+          "default": "F4",
+          "markdownDescription": "Text shown next to **Jump to Source** / **Edit Source** in context menus. Webview menus are drawn by the extension, so this label cannot be derived from your keybindings automatically — update it (or set it to empty to hide) if you rebind the shortcut under **Preferences: Open Keyboard Shortcuts**."
+        },
+        "jgc.decorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show Git decorations: file colors in the Explorer and change markers in the line-number gutter. Turn this off to fall back to VS Code's built-in Git decorations alone."
+        },
+        "jgc.decorations.fileColors": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Color file names in the Explorer by Git status. Colors are the `jgc.decoration.*` entries under **Color Customizations**."
+        },
+        "jgc.decorations.gutterMarkers": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Draw a colored marker in the line-number gutter for every added, modified or deleted line."
+        },
+        "jgc.blame.displayMode": {
+          "type": "string",
+          "enum": [
+            "all",
+            "cursor",
+            "around"
+          ],
+          "enumDescriptions": [
+            "Annotate every line of the file",
+            "Only the line under the cursor",
+            "The cursor line plus N lines of context (see #jgc.blame.aroundLines#)"
+          ],
+          "default": "all",
+          "description": "Controls which lines show inline Git blame annotations."
+        },
+        "jgc.blame.aroundLines": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "description": "Lines of context above/below the cursor when jgc.blame.displayMode is 'around'."
+        },
+        "jgc.blame.columns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "revision",
+              "date",
+              "author",
+              "commitNumber"
+            ],
+            "enumDescriptions": [
+              "Short commit hash",
+              "Author date",
+              "Author name",
+              "Commit number (1 = newest)"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "date",
+            "author"
+          ],
+          "description": "Which columns to show in inline Git blame annotations. Display order is always: Revision → Date → Author → Commit Number."
+        },
+        "jgc.blame.colorMode": {
+          "type": "string",
+          "enum": [
+            "author",
+            "order",
+            "hide"
+          ],
+          "enumDescriptions": [
+            "A distinct color per author",
+            "JetBrains-style coloring by commit age: recent commits stand out, old ones fade",
+            "Hide coloring: fixed foreground colors (#jgc.blame.foregroundColorLight# / #jgc.blame.foregroundColorDark#)"
+          ],
+          "default": "order",
+          "description": "How inline Git blame annotations are colored."
+        },
+        "jgc.blame.nameStyle": {
+          "type": "string",
+          "enum": [
+            "initials",
+            "lastName",
+            "firstName",
+            "fullName",
+            "email"
+          ],
+          "enumDescriptions": [
+            "Author initials (e.g. ZS)",
+            "Last name only",
+            "First name only",
+            "Full name",
+            "Author email"
+          ],
+          "default": "fullName",
+          "description": "How the author name is displayed in inline Git blame annotations."
+        },
+        "jgc.blame.dateFormat": {
+          "type": "string",
+          "default": "yyyy-MM-dd HH:mm",
+          "description": "Date format for inline blame annotations. Tokens: yyyy MM dd HH mm ss."
+        },
+        "jgc.blame.foregroundColorLight": {
+          "type": "string",
+          "default": "#57606a",
+          "description": "Inline blame annotation color for light themes."
+        },
+        "jgc.blame.foregroundColorDark": {
+          "type": "string",
+          "default": "#8b949e",
+          "description": "Inline blame annotation color for dark themes."
+        },
+        "jgc.caretBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the caret line-end blame: `Who, date * summary` at the end of the line the caret is on. Turn off to hide it and keep the full inline blame annotations."
+        },
+        "jgc.caretBlame.format": {
+          "type": "string",
+          "default": "${who}, ${date} * ${message}",
+          "description": "Template for the caret blame text. Tokens: ${who} (author name, or You for your own commits and uncommitted lines), ${date} (YYYY/MM/DD), ${message} (commit summary), ${hash} (short hash)."
+        },
+        "jgc.caretBlame.messageMaxLength": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum number of characters of the commit summary (${message}); longer summaries end with an ellipsis. Other parts of the template are never truncated."
+        },
+        "jgc.worktree.openBehavior": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "thisWindow",
+            "newWindow"
+          ],
+          "enumDescriptions": [
+            "Always ask which window to open in",
+            "Always open in the current window",
+            "Always open in a new window"
+          ],
+          "default": "ask",
+          "description": "Controls how projects are opened from Git worktrees."
+        },
+        "jgc.onboarding.builtinGitPrompt": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "never"
+          ],
+          "default": "ask",
+          "enumDescriptions": [
+            "Show the dialog offering to disable VS Code's built-in Git extension",
+            "Never show the built-in Git dialog"
+          ],
+          "description": "Whether JGC may offer, via one dialog, to disable VS Code's built-in Git extension (git.enabled = false). Answering the dialog sets this to \"never\"; change it back to \"ask\" to see the dialog again."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "watch:webview": "cd webview && pnpm run watch",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "vsce:package": "pnpm run package && pnpm run build:web && vsce package --no-dependencies",
+    "vsce:publish": "pnpm run package && pnpm run build:web && vsce publish --no-dependencies",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "biome check src webview/src",
+    "test": "vscode-test",
+    "test:unit": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"src/**/*.test.ts\"",
+    "build:web": "cd webview && pnpm run build",
+    "build": "pnpm run compile && pnpm run build:web",
+    "dev:web": "cd webview && pnpm run dev"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.15",
+    "@types/diff": "^8.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.91.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.2",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.18.2+sha512.9fb969fa749b3ade6035e0f109f0b8a60b5d08a1a87fdf72e337da90dcc93336e2280ca4e44f2358a649b83c17959e9993e777c2080879f3801e6f0d999ad3dd",
+  "dependencies": {
+    "diff": "^9.0.0",
+    "node-diff3": "^3.2.0"
+  }
+}
