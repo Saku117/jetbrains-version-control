@@ -29,6 +29,7 @@ CLAUDE.md
 # reads this file — these were shipping stale copies of package.json.
 .history/**
 .idea/**
+notes/**
 
 # Already-built release artifacts must never end up inside the next package.
 *.vsix
